@@ -1,0 +1,43 @@
+分布式系统session同步
+
+分布式系统session同步
+分布式系统由于有多台服务器，用户在一次会话里有可能访问不同的服务器，这是由于每次请求都由负载均衡服务器通过算法去选择访问的服务器。那里用户可能第一次访问服务器时web容器如tomcat新建了一个session保存在了服务器里。再次访问服务器时可能就访问另外一台服务器了就取不到这个session了。这会导致很对问题，例如有可能登入系统之后需要再次登入。
+
+session是由首次访问服务器的时候，由web容器底层生成的session对象，由于保存用户的状态信息。同时会生成一个sessionId用于指向这个session对象，web容器（例如tomcat）以键值对的形式保存这个session对象。然后服务器将这个sessionId放在cookie里返回给浏览器。再次请求服务器就从cookie里获得sessionId然后从服务器取得session对象。
+
+多台服务器session同步解决方案
+
+1.用redis保存session，所有服务器共享这个redis服务器
+
+HttpSession session = request.getSession();
+Jedis redis = new Jedis("127.0.0.1");
+String sessionJson = redis.get(session.getId());
+if(StringUtils.isNotBlank(sessionJson)){
+    session=JSON.parseObject(sessionJson, HttpSession.class);
+}else{
+    redis.set(session.getId(), JSON.toJSONString(session));
+    Cookie cookie = new Cookie("redisCookieId", session.getId());
+    response.addCookie(cookie);
+}
+
+2.使用浏览器cookie储存session信息
+
+HttpSession session =request.getSession() ;
+Cookie[] cookies = request.getCookies();
+boolean isHasSession = false ;
+String key = DESUtil.genDESKey();
+for(Cookie cookie:cookies){
+    if(cookie.getName().equals("sessionInfo")){
+    session = JSON.parseObject(cookie.getValue(),HttpSession.class);
+    isHasSession=true;
+    }
+}
+if(!isHasSession){
+    String desSession = DESUtil.encode(JSON.toJSONString(session), key);
+    Cookie cookie = new Cookie("sessionInfo", desSession );
+    response.addCookie(cookie);
+}
+
+3.与使用redis类类似，使用一个共享数据库，里面新建一个专门保存session信息的表。 所有的服务器要是使用session的话，直接从这个数据库里取session信息。不过这种方式效率很低，并且需要隔断时间去清理一些过期的session数据，高并发时，会有大量session进来，对数据库性能要求较高。
+
+4。对负载均衡服务器分配服务器算法进行改进，同一用户（即同一个sessionId）经过负载均衡分配服务器时，默认分配上次访问的服务器。
