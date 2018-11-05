@@ -1,0 +1,88 @@
+基于session简单的实现单点登录
+web服务器为每一个浏览器实例对应一个session。
+
+这个session有自己的一个独立id,这个id保存在浏览器的cookie中（这个cookie貌似随着这个浏览器实例的关闭而清除），
+
+访问web服务器的时候，web服务会根据你cookie中的sessionId来决定重新创建一个session还是使用已经存在的session。
+
+如果使用桌面的ie图标打开一个IE窗口，这个窗口属于一个新的浏览器实例（其中不包含sessionid信息），
+
+这时候用这个IE访问web服务器的时候web服务器会为这个浏览器实例新创建一个httpsession，
+
+sessionId也是新的（sessionId保存到本地的cookie中），
+
+不会对你以前打开的窗口中的session产生覆盖，关闭ie窗口的时候cookie中的信息也就清除掉了。 
+
+如果是在打开的ie窗口中按“ctrl+n”打开一个ie窗口，这个窗口于刚才的窗口是同一个实例，
+
+与刚才的窗口共用session，所有的同一个ie实例的窗口都关掉后，会清除掉sessionId。
+
+登陆之后验证:
+
+//用户登录成功后，更新session Map，如重复登录，强制之前session过期  
+
+String sessionid = UserSession.userMap.get(username);  
+
+UserSession userSession = new UserSession();
+
+if(sessionid != null&&!sessionid.equals("")){
+
+    //注销在线用户,如果session id 相同，不销毁。  
+
+    if(!sessionid.equals(request.getSession().getId())){ 
+
+    	userSession.destroyed(username, request);
+
+    	userSession.created(username, request);
+
+	userSession.created(username, request);
+
+处理请求:
+
+public class UserSession implements HttpSessionListener {
+
+	public static HashMap<String,String> userMap = new HashMap<String,String>();  
+
+	public static HashMap<String,HttpSession> sessionMap = new HashMap<String,HttpSession>();  
+
+	public void destroyed(String username, HttpServletRequest request) {
+
+		String sessionid = userMap.get(username);
+
+		sessionMap.get(sessionid).invalidate();
+
+		sessionMap.remove(sessionid);
+
+		userMap.remove(username);
+
+	public void created(String username, HttpServletRequest request) {
+
+		HttpSession session = request.getSession();
+
+		userMap.put(username, session.getId());  
+
+		sessionMap.put(session.getId(), session);  
+
+	public void sessionCreated(HttpSessionEvent httpSessionEvent) {  
+
+	public void sessionDestroyed(HttpSessionEvent httpSessionEvent) {
+
+
+
+注销需移除相应的map:
+
+SecurityUtils.getSubject().logout(); // session会销毁，在SessionListener监听session销毁，清理权限缓存
+
+	if(UserSession.sessionMap.containsKey(request.getSession().getId())){  
+
+	    UserSession.sessionMap.remove(request.getSession().getId());  
+
+	    for(String key : UserSession.userMap.keySet()){
+
+	        if(UserSession.userMap.get(key).equals(request.getSession().getId())){  
+
+	            UserSession.userMap.remove(key);
+
+
+该方法只适用于web的单点登录，移动端的单点登录暂时没有思路，还请大大们指教。
+
